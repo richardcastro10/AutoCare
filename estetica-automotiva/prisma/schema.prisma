@@ -1,0 +1,340 @@
+// Marketplace de estética automotiva: várias lojas, cada uma com seu painel.
+// Valores em dinheiro são guardados em CENTAVOS (Int) para evitar erro de arredondamento.
+// Datas de agendamento ficam como texto "YYYY-MM-DD" e horários em MINUTOS desde 00:00
+// (ex.: 8h30 = 510). Isso evita dor de cabeça com fuso horário no SQLite.
+//
+// Regra de ouro do multi-loja: TODA consulta do painel filtra por lojaId.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+enum Papel {
+  ADMIN // dono da loja
+  FUNCIONARIO
+}
+
+// Situação da loja na plataforma (quem muda é o dono do AutoCare, em /plataforma)
+enum StatusLoja {
+  PENDENTE // cadastrada, esperando aprovação
+  ATIVA
+  SUSPENSA // some do app e ninguém da loja entra no painel
+}
+
+enum TipoVeiculo {
+  MOTO
+  CARRO
+  SUV
+  CAMINHONETE
+}
+
+enum StatusAgendamento {
+  PENDENTE
+  CONFIRMADO
+  EM_ANDAMENTO
+  CONCLUIDO
+  CANCELADO
+  NAO_COMPARECEU
+}
+
+enum FormaPagamento {
+  PIX
+  DINHEIRO
+  CREDITO
+  DEBITO
+}
+
+enum TipoMovimento {
+  ENTRADA
+  SAIDA
+  AJUSTE
+}
+
+// ---------- Loja (cada estética do marketplace) ----------
+
+model Loja {
+  id                   Int        @id @default(autoincrement())
+  slug                 String     @unique // usado na URL: /loja/brilho-pro
+  nome                 String
+  descricao            String     @default("")
+  telefone             String     @default("")
+  endereco             String     @default("")
+  bairro               String     @default("")
+  cidade               String     @default("")
+  uf                   String     @default("SP")
+  latitude             Float? // pra calcular a distância até o cliente
+  longitude            Float?
+  capaUrl              String     @default("") // foto da fachada
+  logoUrl              String     @default("")
+  ativa                Boolean    @default(true) // liga/desliga do próprio dono da loja
+  // a loja só aparece no app se status = ATIVA e ativa = true (e tiver serviço ativo)
+  status               StatusLoja @default(PENDENTE)
+  motivoStatus         String     @default("") // preenchido quando a plataforma suspende
+  statusAlteradoEm     DateTime?
+  vagasSimultaneas     Int        @default(2) // quantos carros dá pra lavar ao mesmo tempo
+  intervaloSlotMin     Int        @default(30) // de quanto em quanto tempo aparece um horário
+  antecedenciaMinHoras Int        @default(1) // cliente não agenda com menos que isso
+  diasAntecedenciaMax  Int        @default(30) // até quantos dias pra frente aparece na agenda
+  createdAt            DateTime   @default(now())
+
+  usuarios     Usuario[]
+  horarios     HorarioFuncionamento[]
+  bloqueios    Bloqueio[]
+  servicos     Servico[]
+  produtos     Produto[]
+  agendamentos Agendamento[]
+  despesas     Despesa[]
+  avaliacoes   Avaliacao[]
+}
+
+// ---------- Acesso ao painel ----------
+
+model Usuario {
+  id           Int       @id @default(autoincrement())
+  lojaId       Int
+  nome         String
+  email        String    @unique
+  senhaHash    String
+  papel        Papel     @default(FUNCIONARIO)
+  ativo        Boolean   @default(true)
+  ultimoAcesso DateTime? // último login no painel da loja
+  createdAt    DateTime  @default(now())
+  loja         Loja      @relation(fields: [lojaId], references: [id], onDelete: Cascade)
+
+  @@index([lojaId])
+}
+
+// Dono da plataforma AutoCare: login separado (/plataforma), não pertence a nenhuma loja
+model AdminPlataforma {
+  id        Int      @id @default(autoincrement())
+  nome      String
+  email     String   @unique
+  senhaHash String
+  createdAt DateTime @default(now())
+}
+
+model HorarioFuncionamento {
+  id        Int     @id @default(autoincrement())
+  lojaId    Int
+  diaSemana Int // 0 = domingo ... 6 = sábado
+  aberto    Boolean @default(true)
+  abre      Int     @default(480) // 08:00
+  fecha     Int     @default(1080) // 18:00
+  loja      Loja    @relation(fields: [lojaId], references: [id], onDelete: Cascade)
+
+  @@unique([lojaId, diaSemana])
+}
+
+// Dias fechados (feriado, manutenção...)
+model Bloqueio {
+  id     Int    @id @default(autoincrement())
+  lojaId Int
+  data   String // YYYY-MM-DD
+  motivo String
+  loja   Loja   @relation(fields: [lojaId], references: [id], onDelete: Cascade)
+
+  @@unique([lojaId, data])
+}
+
+// ---------- Catálogo ----------
+
+model Servico {
+  id         Int               @id @default(autoincrement())
+  lojaId     Int
+  nome       String
+  resumo     String            @default("") // linha curta: "Limpeza completa + cera"
+  inclusos   String            @default("") // "O que está incluso": um item por linha
+  duracaoMin Int
+  imagemUrl  String            @default("")
+  ativo      Boolean           @default(true)
+  destaque   Boolean           @default(false)
+  ordem      Int               @default(0)
+  createdAt  DateTime          @default(now())
+  loja       Loja              @relation(fields: [lojaId], references: [id], onDelete: Cascade)
+  precos     PrecoServico[]
+  insumos    ServicoInsumo[]
+  itens      AgendamentoItem[]
+
+  @@index([lojaId])
+}
+
+// Preço por tipo de veículo. Se não tiver preço pro tipo, o serviço não é feito nele.
+model PrecoServico {
+  id          Int         @id @default(autoincrement())
+  servicoId   Int
+  tipoVeiculo TipoVeiculo
+  preco       Int // centavos
+  servico     Servico     @relation(fields: [servicoId], references: [id], onDelete: Cascade)
+
+  @@unique([servicoId, tipoVeiculo])
+}
+
+// ---------- Estoque ----------
+
+model Produto {
+  id               Int                @id @default(autoincrement())
+  lojaId           Int
+  nome             String
+  unidade          String // ml, g, un
+  estoqueAtual     Float              @default(0)
+  estoqueMinimo    Float              @default(0)
+  precoEmbalagem   Int                @default(0) // centavos (ex.: galão de 5L = 8990)
+  tamanhoEmbalagem Float              @default(1) // na unidade (ex.: 5000 ml)
+  ativo            Boolean            @default(true)
+  createdAt        DateTime           @default(now())
+  loja             Loja               @relation(fields: [lojaId], references: [id], onDelete: Cascade)
+  insumos          ServicoInsumo[]
+  movimentos       MovimentoEstoque[]
+
+  @@index([lojaId])
+}
+
+// "Ficha técnica": quanto de cada produto um serviço gasta num CARRO
+// (os outros tipos usam um multiplicador, ver src/lib/constantes.ts)
+model ServicoInsumo {
+  servicoId  Int
+  produtoId  Int
+  quantidade Float
+  servico    Servico @relation(fields: [servicoId], references: [id], onDelete: Cascade)
+  produto    Produto @relation(fields: [produtoId], references: [id], onDelete: Cascade)
+
+  @@id([servicoId, produtoId])
+}
+
+model MovimentoEstoque {
+  id            Int           @id @default(autoincrement())
+  produtoId     Int
+  tipo          TipoMovimento
+  quantidade    Float // positivo = entrou, negativo = saiu
+  custoTotal    Int           @default(0) // centavos
+  motivo        String        @default("")
+  agendamentoId Int?
+  createdAt     DateTime      @default(now())
+  produto       Produto       @relation(fields: [produtoId], references: [id], onDelete: Cascade)
+  agendamento   Agendamento?  @relation(fields: [agendamentoId], references: [id], onDelete: SetNull)
+
+  @@index([produtoId])
+  @@index([agendamentoId])
+}
+
+// ---------- Clientes (são do marketplace, podem agendar em qualquer loja) ----------
+
+model Cliente {
+  id           Int           @id @default(autoincrement())
+  nome         String
+  telefone     String        @unique // só dígitos
+  createdAt    DateTime      @default(now())
+  veiculos     Veiculo[]
+  agendamentos Agendamento[]
+  avaliacoes   Avaliacao[]
+}
+
+model Veiculo {
+  id           Int           @id @default(autoincrement())
+  clienteId    Int
+  tipo         TipoVeiculo
+  modelo       String
+  placa        String        @default("")
+  cor          String        @default("")
+  createdAt    DateTime      @default(now())
+  cliente      Cliente       @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  agendamentos Agendamento[]
+
+  @@index([clienteId])
+}
+
+model Agendamento {
+  id             Int                @id @default(autoincrement())
+  codigo         String             @unique // usado no link do cliente
+  lojaId         Int
+  clienteId      Int
+  veiculoId      Int
+  data           String // YYYY-MM-DD
+  inicio         Int // minutos desde 00:00
+  fim            Int
+  status         StatusAgendamento  @default(PENDENTE)
+  observacoes    String             @default("")
+  total          Int // soma dos serviços (centavos)
+  desconto       Int                @default(0)
+  valorPago      Int?
+  formaPagamento FormaPagamento?
+  concluidoEm    DateTime?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  loja           Loja               @relation(fields: [lojaId], references: [id], onDelete: Cascade)
+  cliente        Cliente            @relation(fields: [clienteId], references: [id])
+  veiculo        Veiculo            @relation(fields: [veiculoId], references: [id])
+  itens          AgendamentoItem[]
+  consumos       MovimentoEstoque[]
+  avaliacao      Avaliacao?
+
+  @@index([lojaId, data])
+  @@index([clienteId])
+}
+
+// Guarda nome/preço/duração do serviço no momento do agendamento
+// (se o preço mudar depois, o histórico continua certo)
+model AgendamentoItem {
+  id            Int         @id @default(autoincrement())
+  agendamentoId Int
+  servicoId     Int
+  nomeServico   String
+  preco         Int
+  duracaoMin    Int
+  agendamento   Agendamento @relation(fields: [agendamentoId], references: [id], onDelete: Cascade)
+  servico       Servico     @relation(fields: [servicoId], references: [id])
+
+  @@index([agendamentoId])
+}
+
+// Nota que o cliente dá depois que o serviço é concluído (uma por agendamento)
+model Avaliacao {
+  id            Int         @id @default(autoincrement())
+  lojaId        Int
+  clienteId     Int
+  agendamentoId Int         @unique
+  nota          Int // 1 a 5
+  comentario    String      @default("")
+  createdAt     DateTime    @default(now())
+  loja          Loja        @relation(fields: [lojaId], references: [id], onDelete: Cascade)
+  cliente       Cliente     @relation(fields: [clienteId], references: [id])
+  agendamento   Agendamento @relation(fields: [agendamentoId], references: [id], onDelete: Cascade)
+
+  @@index([lojaId])
+}
+
+// ---------- Financeiro ----------
+
+model Despesa {
+  id        Int      @id @default(autoincrement())
+  lojaId    Int
+  descricao String
+  categoria String
+  valor     Int // centavos
+  data      String // YYYY-MM-DD
+  createdAt DateTime @default(now())
+  loja      Loja     @relation(fields: [lojaId], references: [id], onDelete: Cascade)
+
+  @@index([lojaId, data])
+}
+
+// ---------- Verificação do WhatsApp do cliente ----------
+
+// Código de 6 dígitos enviado pro WhatsApp. Guardamos só o hash (bcrypt), nunca o código.
+// Regras (src/lib/verificacao.ts): vale 10 min, 5 tentativas, 1 pedido a cada 60 s e 5 por hora.
+model CodigoVerificacao {
+  id         Int       @id @default(autoincrement())
+  telefone   String // só dígitos
+  codigoHash String
+  expiraEm   DateTime
+  tentativas Int       @default(0)
+  usadoEm    DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([telefone])
+}

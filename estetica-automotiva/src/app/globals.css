@@ -1,0 +1,114 @@
+@import "tailwindcss";
+
+/*
+  Tema escuro do design (AutoCare / painel do proprietário)
+  - fundo / superficie / superficie-2: camadas do azul-petróleo escuro
+  - menta: cor de ação (botões, seleção, valores positivos)
+  - dourado: marca, estrelas de avaliação e pendências
+*/
+@theme {
+  --font-sans: "Archivo Variable", ui-sans-serif, system-ui, sans-serif;
+
+  --color-fundo: #08121a;
+  --color-lateral: #0b1720;
+  --color-superficie: #0f1c26;
+  --color-superficie-2: #152532;
+  --color-borda: #1f3140;
+  --color-borda-forte: #2b4153;
+
+  --color-texto: #e9f0f4;
+  --color-texto-suave: #93a5b3;
+  --color-texto-fraco: #5f7484;
+
+  --color-menta: #34e0a1;
+  --color-menta-forte: #5ff0bb;
+  --color-menta-escura: #0e3b2f;
+
+  --color-dourado: #f2b53a;
+  --color-info: #4f8ff7;
+  --color-perigo: #f26b6b;
+}
+
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+    color-scheme: dark;
+  }
+
+  body {
+    @apply bg-fundo text-texto antialiased;
+  }
+
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-menta;
+  }
+
+  input,
+  select,
+  textarea {
+    @apply text-base;
+  }
+}
+
+@layer components {
+  .titulo {
+    @apply font-semibold tracking-tight;
+  }
+
+  .campo {
+    @apply w-full rounded-lg border border-borda bg-superficie-2 px-3 py-2.5 text-texto
+      placeholder:text-texto-fraco focus:border-menta focus:outline-none focus:ring-2 focus:ring-menta/20;
+  }
+
+  .rotulo {
+    @apply mb-1 block text-sm font-medium text-texto-suave;
+  }
+
+  .btn-primario,
+  .btn-secundario,
+  .btn-perigo {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold
+      transition-colors disabled:cursor-not-allowed disabled:opacity-40;
+  }
+  .btn-primario {
+    @apply bg-menta text-fundo hover:bg-menta-forte;
+  }
+  .btn-secundario {
+    @apply border border-borda-forte bg-superficie-2 text-texto hover:border-menta/60;
+  }
+  .btn-perigo {
+    @apply border border-perigo/40 bg-transparent text-perigo hover:bg-perigo/10;
+  }
+
+  /* botão grande de rodapé do app (Continuar, Confirmar...) */
+  .btn-cta {
+    @apply flex w-full items-center justify-center rounded-xl bg-menta px-4 py-3.5 text-base font-semibold text-fundo
+      transition-colors hover:bg-menta-forte disabled:cursor-not-allowed disabled:opacity-40;
+  }
+
+  .painel {
+    @apply rounded-xl border border-borda bg-superficie;
+  }
+
+  .tabela {
+    @apply w-full text-left text-sm;
+  }
+  .tabela th {
+    @apply border-b border-borda px-3 py-2 font-medium text-texto-suave;
+  }
+  .tabela td {
+    @apply border-b border-borda/70 px-3 py-2.5 align-top;
+  }
+  .tabela tr:last-child td {
+    @apply border-b-0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
