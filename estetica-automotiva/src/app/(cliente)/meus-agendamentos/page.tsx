@@ -3,13 +3,11 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@/generated/prisma/client";
-import { clienteAtualId } from "@/lib/dal";
-import { formatarDataLonga, formatarMoeda, formatarTelefone, hojeISO, minutosParaHora } from "@/lib/format";
+import { exigirCliente } from "@/lib/dal";
+import { formatarDataLonga, formatarMoeda, hojeISO, minutosParaHora } from "@/lib/format";
 import { IconeSeta, IconeVeiculo } from "@/components/icones";
 import { StatusChip } from "@/components/status-chip";
 import { NavCliente } from "@/components/cliente/nav";
-import { sairDoAparelho } from "./actions";
-import { EntrarComWhatsApp } from "./entrar";
 
 export const metadata: Metadata = { title: "Meus horários" };
 
@@ -28,16 +26,12 @@ export default function MeusAgendamentos() {
 }
 
 async function Lista() {
-  // o cookie só existe depois do código do WhatsApp; se o cliente foi apagado, vale como sem cookie
-  const clienteId = await clienteAtualId();
-  const cliente = clienteId
-    ? await prisma.cliente.findUnique({ where: { id: clienteId }, select: { id: true, nome: true, telefone: true } })
-    : null;
+  const cliente = await exigirCliente("/meus-agendamentos");
 
-  if (!cliente) return <EntrarComWhatsApp />;
-
+  // Só o que o cliente agendou pelo app com a conta. Se o celular já era de balcão,
+  // os agendamentos feitos na loja (origem BALCAO) continuam só no painel da loja.
   const agendamentos = await prisma.agendamento.findMany({
-    where: { clienteId: cliente.id },
+    where: { clienteId: cliente.id, origem: "APP" },
     include: { itens: { select: { nomeServico: true } }, veiculo: true, loja: { select: { nome: true } } },
     orderBy: [{ data: "desc" }, { inicio: "desc" }],
     take: 40,
@@ -79,13 +73,6 @@ async function Lista() {
           </ul>
         </section>
       )}
-
-      <form action={sairDoAparelho} className="border-t border-borda pt-4 text-center">
-        <p className="text-sm text-texto-suave">
-          Você está como <strong className="text-texto">{cliente.nome}</strong> {formatarTelefone(cliente.telefone)}
-        </p>
-        <button className="mt-2 text-sm font-medium text-perigo">Sair deste aparelho</button>
-      </form>
     </div>
   );
 }

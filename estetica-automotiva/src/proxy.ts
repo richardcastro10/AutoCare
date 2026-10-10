@@ -1,10 +1,29 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { COOKIE_ADMIN, COOKIE_PLATAFORMA, lerSessaoAdmin, lerSessaoPlataforma } from "@/lib/sessao";
+import {
+  COOKIE_ADMIN,
+  COOKIE_CLIENTE,
+  COOKIE_PLATAFORMA,
+  lerSessaoAdmin,
+  lerSessaoCliente,
+  lerSessaoPlataforma,
+} from "@/lib/sessao";
 
-// Roda antes das rotas /admin e /plataforma. É uma checagem "otimista" (só olha o cookie):
-// a checagem completa (usuário existe, está ativo, loja não suspensa) fica no lib/dal.ts.
+// Roda antes das rotas /admin, /plataforma e das telas do cliente que exigem conta.
+// É uma checagem "otimista" (só olha o cookie): a checagem completa (conta existe, senha não
+// mudou, usuário ativo, loja não suspensa) fica no lib/dal.ts.
 export async function proxy(request: NextRequest) {
-  const { pathname } = request.nextUrl;
+  const { pathname, search } = request.nextUrl;
+
+  // ---- cliente do app: /meus-agendamentos e /conta (entrar e criar conta ficam abertos) ----
+  if (pathname === "/meus-agendamentos" || pathname === "/conta" || pathname === "/conta/nova-senha") {
+    const sessao = await lerSessaoCliente(request.cookies.get(COOKIE_CLIENTE)?.value);
+    if (!sessao) {
+      const entrar = new URL("/conta/entrar", request.url);
+      entrar.searchParams.set("voltar", pathname + search);
+      return NextResponse.redirect(entrar);
+    }
+    return NextResponse.next();
+  }
 
   // ---- painel do dono da plataforma ----
   if (pathname === "/plataforma" || pathname.startsWith("/plataforma/")) {
@@ -31,5 +50,13 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/admin", "/admin/:path*", "/plataforma", "/plataforma/:path*"],
+  matcher: [
+    "/admin",
+    "/admin/:path*",
+    "/plataforma",
+    "/plataforma/:path*",
+    "/meus-agendamentos",
+    "/conta",
+    "/conta/nova-senha",
+  ],
 };

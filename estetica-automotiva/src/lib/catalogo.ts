@@ -162,6 +162,7 @@ export type LojaResumo = {
   longitude: number | null;
   capaUrl: string;
   logoUrl: string;
+  telefone: string; // WhatsApp da loja (público: aparece na página da loja)
   nota: number | null;
   totalAvaliacoes: number;
   precoMinimo: number | null;
@@ -201,6 +202,7 @@ export async function getLojasAtivas(): Promise<LojaResumo[]> {
       longitude: l.longitude,
       capaUrl: l.capaUrl,
       logoUrl: l.logoUrl,
+      telefone: l.telefone,
       nota: nota?._avg.nota ?? null,
       totalAvaliacoes: nota?._count ?? 0,
       precoMinimo: precos.length ? Math.min(...precos) : null,

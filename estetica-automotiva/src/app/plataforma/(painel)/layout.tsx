@@ -14,6 +14,17 @@ export default function LayoutPlataforma({ children }: LayoutProps<"/plataforma"
           <LogoPlataforma compacto />
           <span className="rounded-full bg-superficie-2 px-2.5 py-0.5 text-xs text-texto-suave">Plataforma</span>
         </Link>
+        <nav className="flex gap-1 text-sm">
+          <Link href="/plataforma" className="rounded-lg px-3 py-2 text-texto-suave hover:bg-superficie hover:text-texto">
+            Lojas
+          </Link>
+          <Link
+            href="/plataforma/clientes"
+            className="rounded-lg px-3 py-2 text-texto-suave hover:bg-superficie hover:text-texto"
+          >
+            Clientes
+          </Link>
+        </nav>
         <div className="ml-auto flex items-center gap-3">
           {/* depende do cookie -> dentro de Suspense */}
           <Suspense fallback={<div className="h-9 w-28" />}>

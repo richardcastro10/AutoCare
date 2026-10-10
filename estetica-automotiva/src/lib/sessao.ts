@@ -3,10 +3,8 @@
 import { SignJWT, jwtVerify } from "jose";
 
 export const COOKIE_ADMIN = "sessao_admin";
-export const COOKIE_CLIENTE = "cliente";
 
 const DURACAO_ADMIN_DIAS = 7;
-const DURACAO_CLIENTE_DIAS = 365;
 
 function chave() {
   const segredo = process.env.SESSION_SECRET;
@@ -87,28 +85,32 @@ export async function lerSessaoPlataforma(token?: string): Promise<SessaoPlatafo
 
 export const opcoesCookiePlataforma = opcoesCookieAdmin;
 
-// ---------- Cliente ----------
-// O cliente não tem senha: ele confirma o WhatsApp com um código (lib/verificacao.ts)
-// e guardamos um cookie assinado com o id dele. Assim "Meus horários" funciona nesse aparelho.
-// Só quem chama assinarCliente() é a action verificarCodigo, depois do código certo.
+// ---------- Cliente do app (conta com celular e senha) ----------
+// O nome do cookie mudou ("cliente" -> "sessao_cliente") quando a verificação por código
+// saiu: os cookies antigos simplesmente deixam de ser lidos.
+// "sv" é uma impressão da senha (src/lib/conta.ts): trocar a senha, ou a plataforma gerar
+// uma senha temporária, derruba as sessões abertas em outros aparelhos.
 
-export async function assinarCliente(clienteId: number) {
-  return new SignJWT({ clienteId, tipo: "cliente", verificado: true })
+export const COOKIE_CLIENTE = "sessao_cliente";
+const DURACAO_CLIENTE_DIAS = 30;
+
+export type SessaoCliente = { clienteId: number; sv: string };
+
+export async function assinarSessaoCliente(dados: SessaoCliente) {
+  return new SignJWT({ ...dados, tipo: "cliente" })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime(`${DURACAO_CLIENTE_DIAS}d`)
     .sign(chave());
 }
 
-export async function lerCliente(token?: string): Promise<number | null> {
+export async function lerSessaoCliente(token?: string): Promise<SessaoCliente | null> {
   if (!token) return null;
   try {
     const { payload } = await jwtVerify(token, chave(), { algorithms: ["HS256"] });
-    if (payload.tipo !== "cliente") return null;
-    // Cookies antigos (de antes da verificação por código) não têm essa marca e não valem
-    // mais: eram dados a quem só digitava o telefone, sem provar que o número era dele.
-    if (payload.verificado !== true) return null;
-    return Number(payload.clienteId) || null;
+    if (payload.tipo !== "cliente" || typeof payload.sv !== "string") return null;
+    const clienteId = Number(payload.clienteId);
+    return clienteId ? { clienteId, sv: payload.sv } : null;
   } catch {
     return null;
   }

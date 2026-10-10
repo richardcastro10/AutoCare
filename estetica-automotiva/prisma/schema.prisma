@@ -26,6 +26,13 @@ enum StatusLoja {
   SUSPENSA // some do app e ninguém da loja entra no painel
 }
 
+// De onde veio o registro: do app do cliente (conta logada) ou do balcão (painel da loja).
+// Só o que é APP aparece na conta do cliente; o de balcão fica só no painel da loja.
+enum Origem {
+  APP
+  BALCAO
+}
+
 enum TipoVeiculo {
   MOTO
   CARRO
@@ -224,14 +231,19 @@ model MovimentoEstoque {
 
 // ---------- Clientes (são do marketplace, podem agendar em qualquer loja) ----------
 
+// O cliente pode ter conta no app (celular + senha) ou ser só do balcão (cadastrado pela
+// loja no painel, sem senha). Criar conta com um celular de balcão reaproveita o registro.
 model Cliente {
-  id           Int           @id @default(autoincrement())
-  nome         String
-  telefone     String        @unique // só dígitos
-  createdAt    DateTime      @default(now())
-  veiculos     Veiculo[]
-  agendamentos Agendamento[]
-  avaliacoes   Avaliacao[]
+  id              Int           @id @default(autoincrement())
+  nome            String
+  telefone        String        @unique // só dígitos; é o login da conta
+  senhaHash       String? // bcrypt; null = cliente de balcão, sem conta
+  senhaTemporaria Boolean       @default(false) // gerada pela plataforma: troca obrigatória no próximo login
+  contaCriadaEm   DateTime?
+  createdAt       DateTime      @default(now())
+  veiculos        Veiculo[]
+  agendamentos    Agendamento[]
+  avaliacoes      Avaliacao[]
 }
 
 model Veiculo {
@@ -241,6 +253,7 @@ model Veiculo {
   modelo       String
   placa        String        @default("")
   cor          String        @default("")
+  origem       Origem        @default(BALCAO) // APP = cadastrado pelo cliente; só esses aparecem na conta
   createdAt    DateTime      @default(now())
   cliente      Cliente       @relation(fields: [clienteId], references: [id], onDelete: Cascade)
   agendamentos Agendamento[]
@@ -259,6 +272,7 @@ model Agendamento {
   fim            Int
   status         StatusAgendamento  @default(PENDENTE)
   observacoes    String             @default("")
+  origem         Origem             @default(BALCAO) // APP = feito pelo cliente logado; só esses aparecem na conta
   total          Int // soma dos serviços (centavos)
   desconto       Int                @default(0)
   valorPago      Int?
@@ -323,18 +337,14 @@ model Despesa {
   @@index([lojaId, data])
 }
 
-// ---------- Verificação do WhatsApp do cliente ----------
+// ---------- Login do cliente ----------
 
-// Código de 6 dígitos enviado pro WhatsApp. Guardamos só o hash (bcrypt), nunca o código.
-// Regras (src/lib/verificacao.ts): vale 10 min, 5 tentativas, 1 pedido a cada 60 s e 5 por hora.
-model CodigoVerificacao {
-  id         Int       @id @default(autoincrement())
-  telefone   String // só dígitos
-  codigoHash String
-  expiraEm   DateTime
-  tentativas Int       @default(0)
-  usadoEm    DateTime?
-  createdAt  DateTime  @default(now())
-
-  @@index([telefone])
+// Senhas erradas por celular (proteção contra força bruta, sem serviço externo).
+// Conta pra qualquer celular, tenha conta ou não: o bloqueio não entrega quem tem cadastro.
+// Regras em src/lib/conta.ts: 5 erros seguidos bloqueiam por 15 minutos.
+model TentativaLogin {
+  telefone     String    @id // só dígitos
+  falhas       Int       @default(0)
+  ultimaFalha  DateTime
+  bloqueadoAte DateTime?
 }

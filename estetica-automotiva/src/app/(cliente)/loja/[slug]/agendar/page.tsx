@@ -5,7 +5,7 @@ import { connection } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getLojaPorSlug } from "@/lib/catalogo";
 import { proximosDias } from "@/lib/agenda";
-import { clienteAtualId } from "@/lib/dal";
+import { clienteAtual } from "@/lib/dal";
 import { Assistente } from "./assistente";
 
 export const metadata: Metadata = { title: "Agendar" };
@@ -31,18 +31,21 @@ async function Conteudo({ params, searchParams }: PageProps<"/loja/[slug]/agenda
   const servico = loja.servicos.find((s) => s.id === Number(servicoParam));
   if (!servico) redirect(`/loja/${slug}`); // sem serviço escolhido, volta pra loja
 
-  // cliente que já agendou neste aparelho: traz nome e veículos salvos
-  const clienteId = await clienteAtualId();
-  const cliente = clienteId
-    ? await prisma.cliente.findUnique({
-        where: { id: clienteId },
-        select: {
-          nome: true,
-          telefone: true,
-          veiculos: { select: { id: true, tipo: true, modelo: true, placa: true }, orderBy: { createdAt: "desc" } },
-        },
-      })
-    : null;
+  // Escolher não precisa de login. Se já está logado, traz nome, celular e os veículos
+  // da conta (só os do app). Sem login, a conta é pedida só na confirmação.
+  const logado = await clienteAtual();
+  const cliente =
+    logado && !logado.senhaTemporaria
+      ? {
+          nome: logado.nome,
+          telefone: logado.telefone,
+          veiculos: await prisma.veiculo.findMany({
+            where: { clienteId: logado.id, origem: "APP" },
+            select: { id: true, tipo: true, modelo: true, placa: true },
+            orderBy: { createdAt: "desc" },
+          }),
+        }
+      : null;
 
   return (
     <Assistente

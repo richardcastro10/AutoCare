@@ -2,7 +2,7 @@
 
 Projeto de estudo de **Next.js 16 (App Router)** com **Prisma 7 + SQLite**, seguindo o design do AutoCare / Brilho Pro.
 
-- **App do cliente (PWA)**: encontra estéticas perto dele, vê serviços, preços e avaliações, e agenda em poucos toques (loja → serviço → veículo → dia e horário → confirmação), sem senha: ele só confirma o WhatsApp com um código de 6 números.
+- **App do cliente (PWA)**: encontra estéticas perto dele, vê serviços, preços e avaliações, e agenda em poucos toques (loja → serviço → veículo → dia e horário → confirmação). A conta (celular e senha) só é pedida na confirmação.
 - **Painel de cada loja (`/admin`)**: dashboard, agendamentos, clientes, veículos, serviços e preços (com foto), estoque com baixa automática, financeiro, equipe, relatórios e configurações. Cada loja só enxerga os próprios dados.
 - **Painel da plataforma (`/plataforma`)**: o dono do AutoCare aprova, suspende e reativa lojas e acompanha os números de todas.
 
@@ -40,12 +40,53 @@ Outros comandos úteis: `npx prisma studio` (ver o banco), `npm run build && npm
 
 As fotos enviadas pelo painel ficam na pasta `uploads/` (fora do `public/`) e são servidas pela rota `/arquivos/[nome]`.
 
+## Implantação Molinari
+
+O banco pode ser preparado pra uso real com a loja Molinari, no lugar do demo. O script `prisma/seed-molinari.ts` **apaga todos os dados** (lojas, clientes, agendamentos, acessos, tentativas de login) e cria só:
+
+- o admin da plataforma (`dono@autocare.com` / `admin123`);
+- a Molinari, já aprovada (`ATIVA`) e ligada, com 2 vagas, segunda a sábado das 08:00 às 18:00 e domingo fechado;
+- os 7 serviços e os 10 produtos do catálogo padrão (`prisma/catalogo-padrao.ts`, o mesmo do demo, sem ajuste de preço), com a ficha técnica e uma compra inicial de estoque por produto;
+- o dono da loja.
+
+Sem clientes, agendamentos, avaliações nem despesas: os clientes se cadastram pelo app.
+
+1. Os dados públicos da loja (nome, WhatsApp, endereço, bairro, cidade, horário, vagas) ficam na constante `LOJA`, no topo do `prisma/seed-molinari.ts`.
+2. Nome, e-mail e senha do dono ficam **só no `.env`** (o repositório é público). Os nomes das variáveis estão no `.env.example`:
+   ```
+   MOLINARI_DONO_NOME="..."
+   MOLINARI_DONO_EMAIL="..."
+   MOLINARI_DONO_SENHA="..."
+   ```
+3. Rode:
+   ```bash
+   npm run db:seed:molinari
+   ```
+   O script confere tudo antes de apagar: se faltar algum dado (ou ainda estiver com `PREENCHER` ou o valor de exemplo), ele avisa e não mexe no banco.
+4. Reinicie o `npm run dev`: a lista de lojas fica em cache e ainda mostraria as lojas do demo.
+
+| Onde | Acesso | Login | Senha |
+| --- | --- | --- | --- |
+| `/admin` | Dono da Molinari | `MOLINARI_DONO_EMAIL` do `.env` | `MOLINARI_DONO_SENHA` do `.env` |
+| `/plataforma` | Dono do AutoCare | `dono@autocare.com` | `admin123` |
+
+Depois de implantar:
+
+- O estoque inicial é só um número de partida (16 vezes o mínimo de cada produto). O dono ajusta pela contagem real em Estoque. Essa compra não entra como despesa no Financeiro.
+- Latitude e longitude ficam em branco: o dono preenche em Configurações (sem elas, o app não mostra a distância até a loja).
+- Troque as senhas iniciais. A do dono se troca em Configurações; a do admin da plataforma ainda não tem tela.
+- Os ids não são zerados de propósito: um cookie antigo do demo guarda um id e, se a numeração recomeçasse, poderia abrir a conta de outra pessoa. Com a numeração seguindo, esses cookies só deixam de valer.
+
+**Voltar pro demo**: `npx prisma db seed` recria as 5 lojas de exemplo (apaga a Molinari). Antes da implantação, o banco do demo foi copiado pra `prisma/lavagem-backup-demo.db`; pra restaurar essa cópia, pare o servidor e copie o arquivo por cima de `prisma/lavagem.db`.
+
 ## Estrutura
 
 ```
 prisma/
   schema.prisma        Loja, Usuario, Servico, Produto, Agendamento, Avaliacao...
-  seed.ts              admin da plataforma, 4 lojas ativas + 1 pendente, 26 clientes, ~740 agendamentos
+  seed.ts              demo: admin da plataforma, 4 lojas ativas + 1 pendente, 26 clientes, ~740 agendamentos
+  seed-molinari.ts     implantação real: apaga tudo e cria só a Molinari (npm run db:seed:molinari)
+  catalogo-padrao.ts   7 serviços e 10 produtos usados pelos dois scripts
 src/
   proxy.ts             barra /admin e /plataforma sem login (o antigo middleware.ts)
   app/
@@ -55,7 +96,8 @@ src/
       loja/[slug]/servico/[id]/     03 detalhes do serviço
       loja/[slug]/agendar/          04-06 veículo, calendário e confirmação
       agendamento/[codigo]/         "ticket" do agendamento, cancelar, avaliar
-      meus-agendamentos/            "Entrar com WhatsApp", lista e "Sair deste aparelho" (+ actions do código)
+      meus-agendamentos/            agendamentos feitos pelo app com a conta (exige login)
+      conta/                        entrar/, criar/, nova-senha/ e a tela da conta (+ actions)
     admin/
       login/  cadastro/
       bloqueado/                    loja suspensa, funcionário desativado ou sessão que não vale mais
@@ -72,8 +114,7 @@ src/
   lib/
     catalogo.ts        lojas, serviços, horários e avaliações com "use cache"
     agenda.ts          cálculo de horários livres
-    verificacao.ts     código de 6 dígitos do WhatsApp: gerar, limites e conferir
-    whatsapp.ts        enviarMensagem(): hoje só mostra no terminal (ponto pra plugar a API)
+    conta.ts           conta do cliente: senha, sessão, bloqueio por senhas erradas, senha temporária
     dal.ts             exigirAdmin() / exigirDono(): checagem de acesso + lojaId; exigirPlataforma()
     sessao.ts          cookies assinados (JWT): sessao_admin, sessao_plataforma e cliente
     plataforma.ts      números de todas as lojas pro painel da plataforma
@@ -134,28 +175,38 @@ export default function Pagina() {
 
 **`useSyncExternalStore`** (`components/cliente/guardado.ts`): lê localização e favoritas do `localStorage` sem `useEffect`.
 
-## Verificação do WhatsApp
+## Conta do cliente (celular e senha)
 
-O cliente não tem senha. O que prova que o número é dele é um código de 6 dígitos (`lib/verificacao.ts` + actions em `meus-agendamentos/actions.ts`):
+O cliente do app tem conta com **celular e senha** (bcrypt, mínimo 8 caracteres). Não tem e-mail, SMS nem nenhum serviço de terceiro. As regras ficam em `lib/conta.ts` e as actions em `app/(cliente)/conta/actions.ts`.
 
-- **Onde aparece**: no último passo do agendamento (nome, WhatsApp, "Receber código", 6 dígitos; só então "Confirmar agendamento" é liberado) e em "Meus horários" ("Entrar com WhatsApp", pra ver os agendamentos em outro aparelho). Quem já confirmou neste aparelho não vê nada disso de novo.
-- **Código**: gerado com `crypto.randomInt`, vale 10 minutos, serve uma vez e o banco guarda só o hash (`CodigoVerificacao.codigoHash`, bcrypt). Só o código mais recente de cada telefone vale.
-- **Limites**: 1 pedido a cada 60 segundos e 5 por hora por telefone; 5 tentativas por código (a tentativa é contada antes de comparar).
-- **Não entrega quem tem cadastro**: pedir código responde sempre "Enviamos um código pro seu WhatsApp", pra número cadastrado ou não.
-- **Cookie**: só a action `verificarCodigo` grava o `COOKIE_CLIENTE`. `confirmarAgendamento` não recebe mais nome nem telefone: usa o cliente do cookie e, sem ele, recusa. Cookies de antes dessa mudança não valem mais (falta a marca `verificado` no token).
-- **Nome**: número que já tem cadastro mantém o nome do banco. Número novo vira cliente com o nome digitado no agendamento. Em "Meus horários", número sem cadastro não cria cliente nem cookie ("Nenhum agendamento com esse número").
-- **Envio**: `lib/whatsapp.ts` ainda não envia de verdade. Com `npm run dev`, o código aparece no terminal do servidor. Em produção o envio falha ("Não foi possível enviar o código agora"), a não ser com `WHATSAPP_CODIGO_NO_TERMINAL=1` no `.env`, que existe só pra testar `npm start` na sua máquina.
+- **Telas**: `/conta/entrar`, `/conta/criar` (nome, celular com máscara, senha e confirmação) e `/conta` (editar nome, trocar senha, ver os veículos, "Sair deste aparelho"). No menu de baixo aparece "Entrar" ou "Minha conta".
+- **Sessão**: cookie `sessao_cliente`, assinado com jose, `httpOnly`, `secure` em produção, `sameSite=lax`, 30 dias. Ele leva uma "impressão" da senha: trocar a senha (ou a plataforma gerar uma temporária) derruba as sessões abertas nos outros aparelhos. O cookie antigo da verificação por código (`cliente`) não é mais lido.
+- **Rotas protegidas**: `/meus-agendamentos` e `/conta` mandam pra `/conta/entrar?voltar=...`. O `voltar` só aceita caminho interno (`/algo`); qualquer outra coisa vira `/meus-agendamentos`.
+- **Agendar**: serviço, veículo, dia e horário são escolhidos sem login. No passo de confirmação, quem não está logado entra ou cria a conta ali mesmo, sem perder as escolhas. Nome e celular vêm da conta, e o veículo fica salvo nela. No servidor, `confirmarAgendamento` exige a conta e não aceita nome nem celular do formulário.
+- **Origem (APP x BALCAO)**: `Agendamento.origem` e `Veiculo.origem`. O que o cliente faz logado no app é `APP`; o que a loja lança no painel é `BALCAO`. "Meus horários" e a tela da conta mostram **só** o que é `APP`. Agendamentos de balcão ficam só no painel da loja.
+- **Celular que já era de balcão**: criar conta com um celular que existe como cliente sem senha usa o mesmo registro (os agendamentos e veículos de balcão continuam fora da conta). Se o celular já tem senha: "Esse celular já tem conta. Entrar?".
+- **Força bruta**: cada senha errada conta na tabela `TentativaLogin`, por celular (tendo conta ou não). Na 5ª errada seguida, o login daquele celular fica bloqueado por 15 minutos, com mensagem clara. Fora isso, a mensagem é sempre "Celular ou senha incorretos." A tentativa é contada antes de conferir a senha, então várias ao mesmo tempo não passam do limite.
+- **Ticket** `/agendamento/CODIGO`: qualquer um com o link vê. Cancelar e avaliar só o dono logado (agendamento `APP` da conta dele); a tela mostra os botões só pra ele, e as actions conferem no servidor.
+- **Esqueci a senha**: `/conta/entrar` diz "Fale com a loja onde você agendou" e mostra o link `wa.me` de cada loja (é só um link). A plataforma busca o cliente pelo celular em `/plataforma/clientes` e usa "Gerar senha temporária": a senha aparece uma única vez, o login desse celular é desbloqueado e, no próximo login, o cliente é obrigado a criar uma senha nova (`/conta/nova-senha`) antes de qualquer outra tela.
 
-Antes de ir pra produção: plugar a API em `lib/whatsapp.ts`, apagar `WHATSAPP_CODIGO_NO_TERMINAL` e adicionar limite por IP (hoje o limite é só por telefone; tem um TODO em `lib/verificacao.ts`).
+Limite conhecido: não há verificação do celular. Quem criar conta primeiro com um número fica com ele; se o dono real aparecer, a plataforma resolve gerando uma senha temporária pra ele (o que derruba a sessão de quem tinha criado).
 
-Pra testar: abra uma loja, escolha serviço, veículo e horário, informe nome e WhatsApp, toque em "Receber código" e copie o código que aparece no terminal do `npm run dev`. Os clientes do seed têm telefones como `13991000000`: use um deles em "Meus horários" pra ver um histórico cheio.
+### Testes de ponta a ponta (Playwright)
+
+```bash
+npx playwright install chromium   # só na primeira vez
+npm run build
+npm run test:e2e
+```
+
+Os testes ficam em `e2e/` e rodam o build de produção na porta 3200 apontando pra `prisma/e2e.db`, uma cópia do banco feita na hora (`e2e/preparar-banco.mjs`, que também cria um cliente de balcão). O banco de verdade não é tocado. Cobrem: criar conta, sair e entrar; bloqueio depois de 5 senhas erradas; agendar sem login (a conta é pedida na confirmação e a escolha não se perde); duas contas sem ver os agendamentos uma da outra; balcão fora da conta; outro cliente sem conseguir cancelar pelo link (nem chamando a action direto); senha temporária pela plataforma.
 
 ## Regras de negócio
 
 - **Vagas simultâneas**: um horário fica livre se, durante todo o serviço, tiver menos carros que vagas (`cabeNoHorario`). A conferência é refeita dentro de uma transação na hora de salvar.
 - **Ficha técnica**: cada serviço diz quanto gasta de cada produto num carro (moto 50%, SUV 130%, caminhonete 150%). Ao concluir, o funcionário confirma as quantidades e o estoque baixa.
 - **Lucro estimado** = recebido − produtos usados − despesas.
-- **Cliente sem senha, com WhatsApp confirmado**: o telefone identifica o cliente, mas ele só é "lembrado" no aparelho (cookie assinado) depois de digitar o código enviado pro WhatsApp. Detalhes em "Verificação do WhatsApp". O link `/agendamento/CODIGO` continua funcionando sem login em qualquer lugar: é por ele que o cliente vê, cancela e avalia.
+- **Conta do cliente**: celular e senha, pedida só na hora de confirmar o agendamento. Detalhes em "Conta do cliente". O link `/agendamento/CODIGO` abre pra qualquer um, mas só o dono logado cancela e avalia.
 - **Avaliação**: só depois do serviço concluído, uma por agendamento. A nota média aparece na lista de lojas.
 
 ## Ideias pra evoluir

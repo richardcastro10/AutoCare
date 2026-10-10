@@ -10,10 +10,11 @@ import {
   COOKIE_ADMIN,
   COOKIE_CLIENTE,
   COOKIE_PLATAFORMA,
-  lerCliente,
   lerSessaoAdmin,
+  lerSessaoCliente,
   lerSessaoPlataforma,
 } from "./sessao";
+import { impressaoSenha } from "./conta";
 import { getLojaCompleta, getSituacaoPorSlug, type LojaCompleta } from "./catalogo";
 import { prisma } from "./prisma";
 
@@ -66,9 +67,33 @@ export const exigirPlataforma = cache(async () => {
   return admin;
 });
 
-export async function clienteAtualId() {
-  const token = (await cookies()).get(COOKIE_CLIENTE)?.value;
-  return lerCliente(token);
+// ---------- Cliente do app (conta com celular e senha) ----------
+
+/**
+ * Cliente logado neste aparelho, ou null. Confere no banco: conta que não existe mais,
+ * ou senha trocada depois do login (inclusive senha temporária da plataforma), não vale.
+ */
+export const clienteAtual = cache(async () => {
+  const sessao = await lerSessaoCliente((await cookies()).get(COOKIE_CLIENTE)?.value);
+  if (!sessao) return null;
+
+  const cliente = await prisma.cliente.findUnique({
+    where: { id: sessao.clienteId },
+    select: { id: true, nome: true, telefone: true, senhaHash: true, senhaTemporaria: true },
+  });
+  if (!cliente?.senhaHash || impressaoSenha(cliente.senhaHash) !== sessao.sv) return null;
+  return { id: cliente.id, nome: cliente.nome, telefone: cliente.telefone, senhaTemporaria: cliente.senhaTemporaria };
+});
+
+/**
+ * Páginas e ações que exigem a conta (/meus-agendamentos, /conta...).
+ * `caminho` é pra onde voltar depois de entrar. Senha temporária: troca obrigatória antes.
+ */
+export async function exigirCliente(caminho: string) {
+  const cliente = await clienteAtual();
+  if (!cliente) redirect(`/conta/entrar?voltar=${encodeURIComponent(caminho)}`);
+  if (cliente.senhaTemporaria) redirect(`/conta/nova-senha?voltar=${encodeURIComponent(caminho)}`);
+  return cliente;
 }
 
 // ---------- Página da loja no app (com prévia pra loja não publicada) ----------

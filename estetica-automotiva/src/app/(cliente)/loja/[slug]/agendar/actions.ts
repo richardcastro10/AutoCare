@@ -1,6 +1,5 @@
 "use server";
 
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { TipoVeiculo } from "@/generated/prisma/enums";
@@ -9,8 +8,7 @@ import { getLojaCompleta, lojaPublicada } from "@/lib/catalogo";
 import { cabeNoHorario, gerarCodigo, horariosLivres } from "@/lib/agenda";
 import { STATUS_ATIVOS } from "@/lib/constantes";
 import { dataValida, formatarPlaca } from "@/lib/format";
-import { COOKIE_CLIENTE } from "@/lib/sessao";
-import { clienteAtualId } from "@/lib/dal";
+import { clienteAtual } from "@/lib/dal";
 
 /** Chamada pela tela de data quando o cliente escolhe um dia */
 export async function buscarHorarios(lojaId: number, data: string, servicoIds: number[]) {
@@ -24,11 +22,6 @@ export async function buscarHorarios(lojaId: number, data: string, servicoIds: n
   return horariosLivres(loja, data, duracao);
 }
 
-/** "Não é você?": esquece o cliente neste aparelho */
-export async function trocarCliente(slug: string, servicoId: number) {
-  (await cookies()).delete(COOKIE_CLIENTE);
-  redirect(`/loja/${slug}/agendar?servico=${servicoId}`);
-}
 
 const esquema = z.object({
   lojaId: z.coerce.number().int(),
@@ -43,7 +36,7 @@ const esquema = z.object({
   observacoes: z.string().trim().max(300).default(""),
 });
 
-export type EstadoAgendamento = { erro: string; horarioOcupado?: boolean; precisaVerificar?: boolean } | undefined;
+export type EstadoAgendamento = { erro: string; horarioOcupado?: boolean; precisaEntrar?: boolean } | undefined;
 
 export async function confirmarAgendamento(
   _anterior: EstadoAgendamento,
@@ -72,18 +65,18 @@ export async function confirmarAgendamento(
   if (!loja || !lojaPublicada(loja)) return { erro: "Essa loja não está aceitando agendamentos agora." };
 
   // ---- quem é o cliente ----
-  // Sempre o do cookie, que só existe depois do código do WhatsApp (action verificarCodigo).
-  // O formulário não manda mais nome/telefone: antes dava pra digitar o número de outra
-  // pessoa e sair com o cookie dela.
-  const clienteId = await clienteAtualId();
-  const cliente = clienteId ? await prisma.cliente.findUnique({ where: { id: clienteId } }) : null;
-  if (!cliente) {
-    return { erro: "Confirme seu WhatsApp com o código pra agendar.", precisaVerificar: true };
+  // Sempre o da conta logada (nome e celular vêm dela). O formulário não manda nome nem
+  // telefone. Escolher serviço, veículo, dia e horário não precisa de login; confirmar precisa.
+  const cliente = await clienteAtual();
+  if (!cliente) return { erro: "Entre na sua conta pra confirmar o agendamento.", precisaEntrar: true };
+  if (cliente.senhaTemporaria) {
+    return { erro: "Crie uma senha nova antes de agendar.", precisaEntrar: true };
   }
 
   // ---- qual o veículo ----
+  // só os veículos da conta (os cadastrados no balcão não aparecem pro cliente)
   const veiculoSalvo = dados.veiculoId
-    ? await prisma.veiculo.findFirst({ where: { id: dados.veiculoId, clienteId: cliente.id } })
+    ? await prisma.veiculo.findFirst({ where: { id: dados.veiculoId, clienteId: cliente.id, origem: "APP" } })
     : null;
 
   const tipo = veiculoSalvo?.tipo ?? dados.novoTipo;
@@ -118,6 +111,7 @@ export async function confirmarAgendamento(
         where: {
           clienteId: cliente.id,
           lojaId: loja.id,
+          origem: "APP",
           data: dados.data,
           status: { in: ["PENDENTE", "CONFIRMADO", "EM_ANDAMENTO"] },
           inicio: { lt: fim },
@@ -133,13 +127,18 @@ export async function confirmarAgendamento(
       });
       if (!cabeNoHorario(ocupados, dados.inicio, fim, loja.vagasSimultaneas)) throw new Error("HORARIO_OCUPADO");
 
+      // veículo novo fica salvo na conta (origem APP). Mesma placa já cadastrada
+      // (inclusive no balcão): reaproveita e passa a aparecer na conta.
       let veiculo = veiculoSalvo;
       if (!veiculo && dados.novaPlaca) {
-        veiculo = await tx.veiculo.findFirst({ where: { clienteId: cliente.id, placa: dados.novaPlaca } });
+        const mesmaPlaca = await tx.veiculo.findFirst({ where: { clienteId: cliente.id, placa: dados.novaPlaca } });
+        if (mesmaPlaca) {
+          veiculo = await tx.veiculo.update({ where: { id: mesmaPlaca.id }, data: { origem: "APP" } });
+        }
       }
       if (!veiculo) {
         veiculo = await tx.veiculo.create({
-          data: { clienteId: cliente.id, tipo, modelo: dados.novoModelo, placa: dados.novaPlaca },
+          data: { clienteId: cliente.id, tipo, modelo: dados.novoModelo, placa: dados.novaPlaca, origem: "APP" },
         });
       }
 
@@ -153,6 +152,7 @@ export async function confirmarAgendamento(
           inicio: dados.inicio,
           fim,
           observacoes: dados.observacoes,
+          origem: "APP",
           total: servicos.reduce((t, s) => t + s.precos[0].preco, 0),
           itens: {
             create: servicos.map((s) => ({

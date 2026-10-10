@@ -165,7 +165,7 @@ export async function criarAgendamentoBalcao(
     const veiculo =
       (d.placa && (await tx.veiculo.findFirst({ where: { clienteId: cliente.id, placa: d.placa } }))) ||
       (await tx.veiculo.create({
-        data: { clienteId: cliente.id, tipo: d.tipo, modelo: d.modelo, placa: d.placa },
+        data: { clienteId: cliente.id, tipo: d.tipo, modelo: d.modelo, placa: d.placa, origem: "BALCAO" },
       }));
 
     return tx.agendamento.create({
@@ -179,6 +179,8 @@ export async function criarAgendamentoBalcao(
         fim: inicio + duracao,
         status: d.status,
         observacoes: d.observacoes,
+        // feito no balcão: não aparece na conta do cliente no app, só no painel da loja
+        origem: "BALCAO",
         total: servicos.reduce((t, s) => t + s.precos[0].preco, 0),
         itens: {
           create: servicos.map((s) => ({

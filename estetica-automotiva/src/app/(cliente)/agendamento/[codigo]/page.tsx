@@ -5,6 +5,7 @@ import { Suspense } from "react";
 import { connection } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { lojaPublicada } from "@/lib/catalogo";
+import { clienteAtual } from "@/lib/dal";
 import { NOME_VEICULO } from "@/lib/constantes";
 import {
   agoraEmMinutos,
@@ -62,6 +63,10 @@ async function Detalhes({ params, searchParams }: PageProps<"/agendamento/[codig
     },
   });
   if (!a) notFound();
+
+  // qualquer um com o link vê; cancelar e avaliar é só do dono logado (agendamento do app)
+  const cliente = await clienteAtual();
+  const dono = !!cliente && !cliente.senhaTemporaria && cliente.id === a.clienteId && a.origem === "APP";
 
   const hoje = hojeISO();
   const jaPassou = a.data < hoje || (a.data === hoje && a.inicio <= agoraEmMinutos());
@@ -137,6 +142,7 @@ async function Detalhes({ params, searchParams }: PageProps<"/agendamento/[codig
       </article>
 
       {a.status === "CONCLUIDO" &&
+        dono &&
         (a.avaliacao ? (
           <div className="painel p-4">
             <p className="text-sm text-texto-suave">Sua avaliação</p>
@@ -189,7 +195,20 @@ async function Detalhes({ params, searchParams }: PageProps<"/agendamento/[codig
         </div>
       )}
 
-      {podeCancelar && <BotaoCancelar codigo={a.codigo} />}
+      {podeCancelar && dono && <BotaoCancelar codigo={a.codigo} />}
+
+      {!dono && a.origem === "APP" && (podeCancelar || (a.status === "CONCLUIDO" && !a.avaliacao)) && (
+        <p className="painel p-4 text-sm text-texto-suave">
+          Pra {podeCancelar ? "cancelar" : "avaliar"},{" "}
+          <Link
+            href={`/conta/entrar?voltar=${encodeURIComponent(`/agendamento/${a.codigo}`)}`}
+            className="font-medium text-menta"
+          >
+            entre com a conta
+          </Link>{" "}
+          que fez este agendamento.
+        </p>
+      )}
 
       {lojaNoAr && (
         <Link href={`/loja/${a.loja.slug}`} className="block py-2 text-center text-sm font-medium text-menta">

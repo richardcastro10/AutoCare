@@ -11,8 +11,10 @@ Marketplace de estéticas automotivas (AutoCare): app do cliente (PWA) em `src/a
 - Sessão de loja que deixou de valer (loja suspensa, usuário desativado) vai pra `/admin/bloqueado`, nunca pra `/admin/login`: o `proxy.ts` devolveria pra `/admin`, em loop.
 - Next.js 16 com `cacheComponents: true`: dado de requisição (cookies, data atual, banco) fica dentro de `<Suspense>`; catálogo usa `"use cache"` + `cacheTag` (`src/lib/catalogo.ts`) e as actions chamam `updateTag(tagLoja(id))`.
 - Prisma 7 + SQLite via `@prisma/adapter-better-sqlite3`. Client gerado em `src/generated/prisma`.
-- Cliente do app não tem senha: o `COOKIE_CLIENTE` só é gravado pela action `verificarCodigo` (`src/app/(cliente)/meus-agendamentos/actions.ts`), depois do código de 6 dígitos do WhatsApp (`src/lib/verificacao.ts`). Nunca crie/atualize cliente nem grave esse cookie a partir de telefone vindo do formulário; use `clienteAtualId()`. Nunca devolva pro navegador se um telefone já tem cadastro. O link `/agendamento/CODIGO` continua sem login.
-- `src/lib/whatsapp.ts` ainda não envia de verdade: em dev mostra o código no terminal; em produção falha, salvo `WHATSAPP_CODIGO_NO_TERMINAL=1` (só teste local).
+- Cliente do app: conta com celular + senha (bcrypt, mín. 8), sem serviço externo. Regras em `src/lib/conta.ts`, actions em `src/app/(cliente)/conta/actions.ts`. Use `clienteAtual()` / `exigirCliente(caminho)` (`src/lib/dal.ts`); nunca identifique o cliente por nome/celular vindo de formulário. O cookie `sessao_cliente` leva uma impressão da senha (trocar a senha derruba as outras sessões). Senha temporária (`senhaTemporaria`) obriga a passar por `/conta/nova-senha`.
+- Login do cliente: mensagem sempre "Celular ou senha incorretos."; 5 erros seguidos por celular bloqueiam 15 min (tabela `TentativaLogin`, conta antes de conferir a senha). `voltar=` só com `voltarSeguro()`.
+- `origem` (`APP` | `BALCAO`) em Agendamento e Veiculo: a conta do cliente mostra só `APP`; o que o painel da loja cria é `BALCAO`. Cancelar/avaliar pelo ticket só o dono logado de um agendamento `APP`.
+- Testes de ponta a ponta: `npm run build && npm run test:e2e` (Playwright, pasta `e2e/`, banco `prisma/e2e.db`, cópia do real).
 - Dinheiro em centavos (Int). Datas de agenda como `"YYYY-MM-DD"` e horários em minutos desde 00:00. Fuso: America/Sao_Paulo (`src/lib/format.ts`).
 - Tema escuro com tokens em `src/app/globals.css` (fundo, superficie, menta, dourado...).
 - Textos da interface em português do Brasil.

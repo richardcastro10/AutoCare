@@ -3,11 +3,23 @@
 import { refresh, updateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { TAG_LOJAS, tagLoja } from "@/lib/catalogo";
+import { clienteAtual } from "@/lib/dal";
 import { agoraEmMinutos, hojeISO } from "@/lib/format";
 
-// O código do agendamento funciona como "senha": só quem tem o link consegue mexer
+// Qualquer um com o link VÊ o agendamento, mas cancelar e avaliar é só do dono:
+// o cliente logado que fez o agendamento pelo app. Agendamento de balcão é com a loja.
+async function agendamentoDoCliente(codigo: string) {
+  const [cliente, agendamento] = await Promise.all([
+    clienteAtual(),
+    prisma.agendamento.findUnique({ where: { codigo }, include: { avaliacao: { select: { id: true } } } }),
+  ]);
+  if (!cliente || cliente.senhaTemporaria || !agendamento) return null;
+  if (agendamento.clienteId !== cliente.id || agendamento.origem !== "APP") return null;
+  return agendamento;
+}
+
 export async function cancelarAgendamento(codigo: string) {
-  const agendamento = await prisma.agendamento.findUnique({ where: { codigo } });
+  const agendamento = await agendamentoDoCliente(codigo);
   if (!agendamento) return;
 
   const hoje = hojeISO();
@@ -28,10 +40,7 @@ export async function avaliar(codigo: string, formData: FormData) {
   const comentario = String(formData.get("comentario") ?? "").trim().slice(0, 500);
   if (!Number.isInteger(nota) || nota < 1 || nota > 5) return;
 
-  const agendamento = await prisma.agendamento.findUnique({
-    where: { codigo },
-    include: { avaliacao: { select: { id: true } } },
-  });
+  const agendamento = await agendamentoDoCliente(codigo);
   // só avalia serviço concluído, e uma vez só
   if (!agendamento || agendamento.status !== "CONCLUIDO" || agendamento.avaliacao) return;
 

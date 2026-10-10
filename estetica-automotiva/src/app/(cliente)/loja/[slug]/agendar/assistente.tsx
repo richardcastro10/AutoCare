@@ -28,8 +28,9 @@ import {
   IconeVoltarSeta,
 } from "@/components/icones";
 import { Foto } from "@/components/foto";
-import { VerificarWhatsApp, type ClienteVerificado } from "@/components/cliente/verificar-whatsapp";
-import { buscarHorarios, confirmarAgendamento, trocarCliente, type EstadoAgendamento } from "./actions";
+import { ContaNoAgendamento, type ContaLogada } from "@/components/cliente/form-conta";
+import { sairSemSairDaTela } from "@/app/(cliente)/conta/actions";
+import { buscarHorarios, confirmarAgendamento, type EstadoAgendamento } from "./actions";
 
 type VeiculoSalvo = { id: number; tipo: TipoVeiculo; modelo: string; placa: string };
 
@@ -43,9 +44,12 @@ type Props = {
 const TITULOS = ["Seu veículo", "Escolha o dia e horário", "Confirme seu agendamento"];
 
 export function Assistente({ loja, servico, dias, cliente: clienteDoAparelho }: Props) {
-  // quem acabou de confirmar o WhatsApp nesta tela (o servidor já gravou o cookie)
-  const [verificado, setVerificado] = useState<ClienteVerificado | null>(null);
-  const cliente = clienteDoAparelho ?? verificado;
+  // Quem acabou de entrar/criar conta nesta tela. O servidor já gravou o cookie e atualiza a
+  // página (com os veículos da conta); isto só evita esperar essa atualização pra liberar o botão.
+  // Tudo que o cliente escolheu (veículo, dia, horário) fica no estado deste componente e não se perde.
+  const [contaLocal, setContaLocal] = useState<ContaLogada | null>(null);
+  const [saindo, iniciarSaida] = useTransition();
+  const cliente = clienteDoAparelho ?? contaLocal;
   const veiculos = clienteDoAparelho?.veiculos ?? [];
   const atende = (tipo: TipoVeiculo) => servico.precos[tipo] !== undefined;
   const primeiroCompativel = veiculos.find((v) => atende(v.tipo));
@@ -66,8 +70,8 @@ export function Assistente({ loja, servico, dias, cliente: clienteDoAparelho }: 
         setEtapa(1);
         carregarHorarios(data);
       }
-      // o cookie deixou de valer no meio do caminho: pede o código de novo
-      if (resultado?.precisaVerificar) setVerificado(null);
+      // a sessão caiu no meio do caminho: mostra entrar/criar conta de novo
+      if (resultado?.precisaEntrar) setContaLocal(null);
       return resultado;
     },
     undefined,
@@ -344,8 +348,16 @@ export function Assistente({ loja, servico, dias, cliente: clienteDoAparelho }: 
                   Agendando como <strong className="text-texto">{cliente.nome}</strong>{" "}
                   {formatarTelefone(cliente.telefone)}
                 </span>
-                <button formAction={trocarCliente.bind(null, loja.slug, servico.id)} className="shrink-0 text-menta">
-                  Não é você?
+                <button
+                  type="button"
+                  className="shrink-0 text-menta"
+                  disabled={saindo}
+                  onClick={() => {
+                    setContaLocal(null);
+                    iniciarSaida(() => sairSemSairDaTela());
+                  }}
+                >
+                  {saindo ? "Saindo..." : "Não é você?"}
                 </button>
               </p>
             )}
@@ -357,16 +369,15 @@ export function Assistente({ loja, servico, dias, cliente: clienteDoAparelho }: 
             )}
           </form>
 
-          {/* Aparelho sem cliente verificado: confirma o WhatsApp com um código antes de agendar.
+          {/* Sem login: entra ou cria a conta aqui mesmo, sem perder o que já escolheu.
               Fica fora do <form> de cima porque tem os próprios formulários (não dá pra aninhar). */}
           {!cliente && (
             <div className="painel p-4">
-              <p className="font-semibold">Confirme seu WhatsApp</p>
-              <p className="mb-3 mt-1 text-sm text-texto-suave">
-                Mandamos um código de 6 números pra garantir que o número é seu. É rápido e só na primeira vez neste
-                aparelho.
+              <p className="font-semibold">Entre pra confirmar</p>
+              <p className="mb-4 mt-1 text-sm text-texto-suave">
+                Seu nome e celular vêm da conta, e o veículo fica salvo pra próxima vez. Suas escolhas continuam aqui.
               </p>
-              <VerificarWhatsApp comNome aoVerificar={setVerificado} />
+              <ContaNoAgendamento aoEntrar={setContaLocal} />
             </div>
           )}
         </div>
@@ -391,7 +402,7 @@ export function Assistente({ loja, servico, dias, cliente: clienteDoAparelho }: 
               {enviando ? "Agendando..." : "Confirmar agendamento"}
             </button>
             <p className="mt-2 text-center text-xs text-texto-suave">
-              {cliente ? "A loja confirma o horário pelo WhatsApp." : "Confirme seu WhatsApp pra liberar o agendamento."}
+              {cliente ? "A loja confirma o horário pelo WhatsApp." : "Entre ou crie sua conta pra liberar o agendamento."}
             </p>
           </>
         )}
