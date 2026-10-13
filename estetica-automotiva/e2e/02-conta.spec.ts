@@ -1,9 +1,49 @@
-// Conta do cliente (celular + senha). Rodar: npm run build && npm run test:e2e
+// Conta do cliente (celular + senha). Rodar: npm run test:e2e
 import fs from "node:fs";
+import pg from "pg";
 import { expect, test, type Browser, type Page } from "@playwright/test";
+import { ADMIN, URL_BANCO_E2E } from "./dados";
 
 const SENHA = "senha-boa-123";
 const BALCAO = { telefone: "11900000001", modelo: "Fusca do Balcão", codigo: "BALCAO01" };
+
+// Cliente "de balcão": cadastrado pela loja no painel (sem senha), com um veículo e um
+// agendamento feitos no balcão. Criado direto no banco de teste.
+test.beforeAll(async () => {
+  const banco = new pg.Client({ connectionString: URL_BANCO_E2E });
+  await banco.connect();
+  try {
+    const { rows: lojas } = await banco.query(`select id from "Loja" where slug = 'molinari'`);
+    const { rows: servicos } = await banco.query(
+      `select s.id, s.nome, s."duracaoMin", p.preco from "Servico" s
+       join "PrecoServico" p on p."servicoId" = s.id and p."tipoVeiculo" = 'CARRO'
+       where s."lojaId" = $1 order by s.ordem limit 1`,
+      [lojas[0].id],
+    );
+    const s = servicos[0];
+    const cliente = await banco.query(
+      `insert into "Cliente" (nome, telefone) values ('Cliente do Balcão', $1)
+       on conflict (telefone) do update set nome = excluded.nome returning id`,
+      [BALCAO.telefone],
+    );
+    const veiculo = await banco.query(
+      `insert into "Veiculo" ("clienteId", tipo, modelo, placa, origem) values ($1, 'CARRO', $2, 'BAL1C00', 'BALCAO') returning id`,
+      [cliente.rows[0].id, BALCAO.modelo],
+    );
+    const data = new Date(Date.now() + 5 * 864e5).toISOString().slice(0, 10);
+    const agendamento = await banco.query(
+      `insert into "Agendamento" (codigo, "lojaId", "clienteId", "veiculoId", data, inicio, fim, status, origem, total, "updatedAt")
+       values ($1, $2, $3, $4, $5, 600, $6, 'CONFIRMADO', 'BALCAO', $7, now()) returning id`,
+      [BALCAO.codigo, lojas[0].id, cliente.rows[0].id, veiculo.rows[0].id, data, 600 + s.duracaoMin, s.preco],
+    );
+    await banco.query(
+      `insert into "AgendamentoItem" ("agendamentoId", "servicoId", "nomeServico", preco, "duracaoMin") values ($1, $2, $3, $4, $5)`,
+      [agendamento.rows[0].id, s.id, s.nome, s.preco, s.duracaoMin],
+    );
+  } finally {
+    await banco.end();
+  }
+});
 
 // celular novo a cada teste (o banco de teste é recriado a cada rodada, mas assim um teste não pisa no outro)
 let sequencia = 0;
@@ -245,8 +285,8 @@ test("esqueci a senha: senha temporária pelo painel da plataforma", async ({ pa
   // plataforma gera a senha temporária
   const plataforma = await novoAparelho(browser);
   await plataforma.goto("/plataforma/login");
-  await plataforma.getByLabel("E-mail").fill("dono@autocare.com");
-  await plataforma.getByLabel("Senha").fill("admin123");
+  await plataforma.getByLabel("E-mail").fill(ADMIN.email);
+  await plataforma.getByLabel("Senha").fill(ADMIN.senha);
   await plataforma.getByRole("button", { name: "Entrar" }).click();
   await plataforma.waitForURL(/\/plataforma$/);
   await plataforma.goto("/plataforma/clientes");

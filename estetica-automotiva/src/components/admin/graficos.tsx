@@ -1,5 +1,6 @@
 // Gráficos feitos à mão com SVG + HTML (sem biblioteca).
 // Linha e barras usam uma cor só (menta); a rosca usa uma cor fixa por tipo de veículo.
+import type { ReactNode } from "react";
 import { formatarMoeda } from "@/lib/format";
 
 /** "R$ 6k" pra eixo */
@@ -16,6 +17,10 @@ function passoBonito(maximo: number) {
 }
 
 export function LinhaFaturamento({ dados }: { dados: { rotulo: string; detalhe: string; valor: number }[] }) {
+  // loja nova (ou período parado): em vez de uma linha reta no zero, uma mensagem
+  if (dados.every((d) => d.valor === 0)) {
+    return <SemDados>Nenhum faturamento nesse período ainda. Ele aparece aqui quando você concluir serviços.</SemDados>;
+  }
   const passo = passoBonito(Math.max(...dados.map((d) => d.valor), 1));
   const topo = passo * 3;
   const marcas = [3, 2, 1, 0].map((n) => n * passo);
@@ -97,6 +102,7 @@ export function Rosca({
   rotuloTotal: string;
 }) {
   const total = itens.reduce((t, i) => t + i.valor, 0);
+  if (total === 0) return <SemDados>Nenhum veículo atendido no mês ainda.</SemDados>;
   const raio = 40;
   const circunferencia = 2 * Math.PI * raio;
   const espaco = itens.filter((i) => i.valor > 0).length > 1 ? 1.2 : 0; // fresta entre as fatias
@@ -147,6 +153,15 @@ export function Rosca({
         ))}
       </ul>
     </div>
+  );
+}
+
+/** Gráfico sem nenhum dado: mensagem no lugar do desenho (mesma altura aproximada) */
+function SemDados({ children }: { children: ReactNode }) {
+  return (
+    <p className="grid min-h-36 place-items-center rounded-lg border border-dashed border-borda px-4 text-center text-sm text-texto-suave">
+      {children}
+    </p>
   );
 }
 

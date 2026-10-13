@@ -8,7 +8,7 @@ import { exigirDono } from "@/lib/dal";
 import { TAG_LOJAS, tagLoja } from "@/lib/catalogo";
 import { TIPOS_VEICULO } from "@/lib/constantes";
 import { lerMoeda } from "@/lib/format";
-import { removerImagem, salvarImagem } from "@/lib/uploads";
+import { removerImagem, salvarImagem, uploadsHabilitados } from "@/lib/uploads";
 
 export type EstadoServico = { erro?: string; ok?: boolean } | undefined;
 
@@ -68,13 +68,16 @@ export async function salvarServico(
     }
   });
 
-  // foto: nova enviada, removida ou mantida
-  const upload = await salvarImagem(formData.get("imagem"));
-  if (upload && "erro" in upload) return { erro: upload.erro };
+  // foto: nova enviada, removida ou mantida. Com o envio de fotos desligado
+  // (UPLOADS_HABILITADOS), qualquer arquivo é ignorado e a foto atual fica como está.
   let imagemUrl = atual?.imagemUrl ?? "";
-  if (upload) imagemUrl = upload.url;
-  else if (formData.get("removerImagem") === "on") imagemUrl = "";
-  if (atual?.imagemUrl && atual.imagemUrl !== imagemUrl) await removerImagem(atual.imagemUrl);
+  if (uploadsHabilitados()) {
+    const upload = await salvarImagem(formData.get("imagem"));
+    if (upload && "erro" in upload) return { erro: upload.erro };
+    if (upload) imagemUrl = upload.url;
+    else if (formData.get("removerImagem") === "on") imagemUrl = "";
+    if (atual?.imagemUrl && atual.imagemUrl !== imagemUrl) await removerImagem(atual.imagemUrl);
+  }
 
   const dados = {
     ...resultado.data,

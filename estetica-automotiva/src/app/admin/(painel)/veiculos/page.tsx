@@ -32,9 +32,10 @@ async function Conteudo({ searchParams }: PageProps<"/admin/veiculos">) {
       ...(tipoFiltro && { tipo: tipoFiltro }),
       ...(busca && {
         OR: [
-          { modelo: { contains: busca } },
+          // Postgres diferencia maiúsculas: mode "insensitive" faz "civic" achar "Civic"
+          { modelo: { contains: busca, mode: "insensitive" } },
           { placa: { contains: busca.toUpperCase().replace(/[^A-Z0-9]/g, "") } },
-          { cliente: { nome: { contains: busca } } },
+          { cliente: { nome: { contains: busca, mode: "insensitive" } } },
         ],
       }),
     },

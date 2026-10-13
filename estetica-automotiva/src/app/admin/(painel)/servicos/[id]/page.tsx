@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { prisma } from "@/lib/prisma";
 import { exigirDono } from "@/lib/dal";
+import { uploadsHabilitados } from "@/lib/uploads";
 import { Aviso, Cabecalho, Carregando } from "@/components/admin/ui";
 import { FormServico } from "./form";
 
@@ -75,6 +76,7 @@ async function Conteudo({ params, searchParams }: PageProps<"/admin/servicos/[id
           }
         }
         produtos={produtos}
+        uploads={uploadsHabilitados()}
       />
     </div>
   );

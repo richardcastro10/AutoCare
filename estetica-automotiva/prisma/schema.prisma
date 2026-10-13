@@ -1,7 +1,7 @@
 // Marketplace de estética automotiva: várias lojas, cada uma com seu painel.
 // Valores em dinheiro são guardados em CENTAVOS (Int) para evitar erro de arredondamento.
 // Datas de agendamento ficam como texto "YYYY-MM-DD" e horários em MINUTOS desde 00:00
-// (ex.: 8h30 = 510). Isso evita dor de cabeça com fuso horário no SQLite.
+// (ex.: 8h30 = 510). Isso evita dor de cabeça com fuso horário.
 //
 // Regra de ouro do multi-loja: TODA consulta do painel filtra por lojaId.
 
@@ -10,8 +10,11 @@ generator client {
   output   = "../src/generated/prisma"
 }
 
+// PostgreSQL (Neon em produção, docker-compose.yml no seu PC).
+// As URLs ficam fora daqui: o CLI lê DIRECT_URL em prisma.config.ts e o app lê
+// DATABASE_URL em src/lib/prisma.ts (adapter @prisma/adapter-pg).
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
 }
 
 enum Papel {

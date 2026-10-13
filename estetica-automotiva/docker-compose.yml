@@ -1,0 +1,25 @@
+# Postgres pro desenvolvimento local (o mesmo motor do Neon em produção).
+#   docker compose up -d        sobe o banco em localhost:5432
+#   docker compose down         para (os dados ficam no volume "dados")
+# As credenciais abaixo são só deste banco local: as do Neon ficam nas variáveis da Vercel.
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: estetica
+      POSTGRES_PASSWORD: estetica
+      POSTGRES_DB: estetica
+    ports:
+      - "5432:5432"
+    volumes:
+      - dados:/var/lib/postgresql/data
+      # cria também o banco dos testes de ponta a ponta (estetica_e2e)
+      - ./docker/criar-banco-e2e.sql:/docker-entrypoint-initdb.d/criar-banco-e2e.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U estetica -d estetica"]
+      interval: 5s
+      retries: 10
+
+volumes:
+  dados:

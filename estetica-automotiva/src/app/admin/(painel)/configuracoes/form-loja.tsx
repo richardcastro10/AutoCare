@@ -4,6 +4,7 @@ import { startTransition, useActionState, useRef } from "react";
 import { CampoImagem } from "@/components/admin/campo-imagem";
 import { Aviso } from "@/components/admin/ui";
 import { IconeMira } from "@/components/icones";
+import { LogoLoja } from "@/components/marca";
 import { salvarLoja } from "./actions";
 
 type Loja = {
@@ -21,7 +22,8 @@ type Loja = {
   ativa: boolean;
 };
 
-export function FormLoja({ loja }: { loja: Loja }) {
+/** `uploads` desligado (UPLOADS_HABILITADOS): sem campos de foto, só a logo atual pra conferir */
+export function FormLoja({ loja, uploads }: { loja: Loja; uploads: boolean }) {
   const [estado, acao, enviando] = useActionState(salvarLoja, undefined);
   const lat = useRef<HTMLInputElement>(null);
   const lng = useRef<HTMLInputElement>(null);
@@ -42,21 +44,32 @@ export function FormLoja({ loja }: { loja: Loja }) {
       }}
       className="space-y-5 p-4"
     >
-      <div className="grid gap-5 md:grid-cols-[2fr_1fr]">
-        <CampoImagem
-          nome="capa"
-          atual={loja.capaUrl}
-          rotulo="Foto da fachada (capa)"
-          dica="Aparece no topo da sua página e na lista de lojas."
-        />
-        <CampoImagem
-          nome="logo"
-          atual={loja.logoUrl}
-          rotulo="Logo"
-          className="aspect-square w-28"
-          dica="Fundo transparente (PNG) fica melhor."
-        />
-      </div>
+      {uploads ? (
+        <div className="grid gap-5 md:grid-cols-[2fr_1fr]">
+          <CampoImagem
+            nome="capa"
+            atual={loja.capaUrl}
+            rotulo="Foto da fachada (capa)"
+            dica="Aparece no topo da sua página e na lista de lojas."
+          />
+          <CampoImagem
+            nome="logo"
+            atual={loja.logoUrl}
+            rotulo="Logo"
+            className="aspect-square w-28"
+            dica="Fundo transparente (PNG) fica melhor. A transparência é mantida."
+          />
+        </div>
+      ) : (
+        <div className="flex items-center gap-4 rounded-lg border border-borda bg-superficie-2/50 p-3">
+          <div className="grid h-20 w-28 shrink-0 place-items-center">
+            <LogoLoja nome={loja.nome} logoUrl={loja.logoUrl} />
+          </div>
+          <p className="text-sm text-texto-suave">
+            O envio de fotos está desligado por enquanto. Pra trocar a logo, fale com o suporte do app.
+          </p>
+        </div>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div>

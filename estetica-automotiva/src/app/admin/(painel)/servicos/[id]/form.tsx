@@ -25,13 +25,15 @@ type Props = {
     insumos: { produtoId: number; quantidade: number }[];
   } | null;
   produtos: Produto[];
+  /** envio de fotos ligado (UPLOADS_HABILITADOS)? Desligado: o campo de foto some */
+  uploads: boolean;
 };
 
 /** centavos -> "50,00" pro campo de texto */
 const paraCampo = (centavos?: number) =>
   centavos === undefined ? "" : (centavos / 100).toFixed(2).replace(".", ",");
 
-export function FormServico({ servico, produtos }: Props) {
+export function FormServico({ servico, produtos, uploads }: Props) {
   const [estado, acao, enviando] = useActionState(salvarServico.bind(null, servico?.id ?? null), undefined);
   const [linhas, setLinhas] = useState(
     servico?.insumos.length ? servico.insumos : [{ produtoId: 0, quantidade: 0 }],
@@ -95,12 +97,14 @@ export function FormServico({ servico, produtos }: Props) {
           />
         </div>
 
-        <CampoImagem
-          nome="imagem"
-          atual={servico?.imagemUrl}
-          rotulo="Foto do serviço"
-          dica="JPG, PNG ou WebP até 5 MB. Foto deitada (paisagem) fica melhor."
-        />
+        {uploads && (
+          <CampoImagem
+            nome="imagem"
+            atual={servico?.imagemUrl}
+            rotulo="Foto do serviço"
+            dica="JPG, PNG ou WebP. Pode ser a foto do celular: ela é reduzida antes de enviar. Foto deitada (paisagem) fica melhor."
+          />
+        )}
 
         <div>
           <label className="rotulo" htmlFor="inclusos">
