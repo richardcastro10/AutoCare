@@ -67,7 +67,7 @@ export function FormConcluir({ id, total, consumos }: { id: number; total: numbe
           <legend className="rotulo">Produtos usados</legend>
           {consumos.length === 0 ? (
             <p className="text-sm text-texto-suave">
-              Esses serviços não têm produtos cadastrados na ficha técnica.
+              Esses serviços não têm produtos cadastrados na ficha técnica: o estoque não muda.
             </p>
           ) : (
             <ul className="space-y-2">
@@ -95,9 +95,11 @@ export function FormConcluir({ id, total, consumos }: { id: number; total: numbe
               ))}
             </ul>
           )}
-          <p className="mt-2 text-xs text-texto-suave">
-            Quantidades sugeridas pela ficha técnica do serviço. Ajuste se usou mais ou menos.
-          </p>
+          {consumos.length > 0 && (
+            <p className="mt-2 text-xs text-texto-suave">
+              Quantidades sugeridas pela ficha técnica do serviço. Ajuste se usou mais ou menos.
+            </p>
+          )}
         </fieldset>
       </div>
 

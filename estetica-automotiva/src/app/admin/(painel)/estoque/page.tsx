@@ -4,7 +4,7 @@ import { Suspense } from "react";
 import { prisma } from "@/lib/prisma";
 import { exigirAdmin } from "@/lib/dal";
 import { formatarMoeda, formatarQuantidade, hojeISO, somarDias } from "@/lib/format";
-import { Cabecalho, Carregando, Numero } from "@/components/admin/ui";
+import { Cabecalho, Carregando, Numero, Vazio } from "@/components/admin/ui";
 import { BotaoEnviar } from "@/components/admin/botao-enviar";
 import { salvarProduto } from "./actions";
 import { CamposProduto } from "./campos-produto";
@@ -54,53 +54,62 @@ async function Conteudo() {
         />
       </div>
 
-      <div className="painel overflow-x-auto">
-        <table className="tabela min-w-[760px]">
-          <thead>
-            <tr>
-              <th>Produto</th>
-              <th className="text-right">Em estoque</th>
-              <th className="text-right">Mínimo</th>
-              <th className="text-right">Uso em 30 dias</th>
-              <th className="text-right">Dura mais</th>
-              <th className="text-right">Custo da embalagem</th>
-            </tr>
-          </thead>
-          <tbody>
-            {produtos.map((p) => {
-              const usado = -(consumo30.find((c) => c.produtoId === p.id)?._sum.quantidade ?? 0);
-              const diasRestantes = usado > 0 ? Math.floor(p.estoqueAtual / (usado / 30)) : null;
-              const baixo = p.estoqueAtual <= p.estoqueMinimo;
-              const embalagens = p.estoqueAtual / p.tamanhoEmbalagem;
-              return (
-                <tr key={p.id} className={p.ativo ? "" : "text-texto-suave"}>
-                  <td>
-                    <Link href={`/admin/estoque/${p.id}`} className="font-semibold text-texto hover:text-menta">
-                      {p.nome}
-                    </Link>
-                    {!p.ativo && <span className="ml-2 text-xs">(inativo)</span>}
-                  </td>
-                  <td className="text-right tabular-nums">
-                    <span className={baixo ? "font-semibold text-perigo" : ""}>
-                      {formatarQuantidade(p.estoqueAtual, p.unidade)}
-                    </span>
-                    <span className="block text-xs text-texto-suave">
-                      {embalagens.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} emb. de{" "}
-                      {formatarQuantidade(p.tamanhoEmbalagem, p.unidade)}
-                    </span>
-                  </td>
-                  <td className="text-right tabular-nums">{formatarQuantidade(p.estoqueMinimo, p.unidade)}</td>
-                  <td className="text-right tabular-nums">{usado ? formatarQuantidade(Math.round(usado), p.unidade) : "-"}</td>
-                  <td className="text-right tabular-nums">
-                    {diasRestantes === null ? "-" : diasRestantes > 365 ? "+1 ano" : `${diasRestantes} dias`}
-                  </td>
-                  <td className="text-right tabular-nums">{formatarMoeda(p.precoEmbalagem)}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+      {produtos.length === 0 ? (
+        <div className="painel">
+          <Vazio>
+            Nenhum produto cadastrado ainda. Cadastre os produtos abaixo e monte a ficha técnica de cada serviço pra o
+            estoque baixar sozinho quando você concluir um atendimento.
+          </Vazio>
+        </div>
+      ) : (
+        <div className="painel overflow-x-auto">
+          <table className="tabela min-w-[760px]">
+            <thead>
+              <tr>
+                <th>Produto</th>
+                <th className="text-right">Em estoque</th>
+                <th className="text-right">Mínimo</th>
+                <th className="text-right">Uso em 30 dias</th>
+                <th className="text-right">Dura mais</th>
+                <th className="text-right">Custo da embalagem</th>
+              </tr>
+            </thead>
+            <tbody>
+              {produtos.map((p) => {
+                const usado = -(consumo30.find((c) => c.produtoId === p.id)?._sum.quantidade ?? 0);
+                const diasRestantes = usado > 0 ? Math.floor(p.estoqueAtual / (usado / 30)) : null;
+                const baixo = p.estoqueAtual <= p.estoqueMinimo;
+                const embalagens = p.estoqueAtual / p.tamanhoEmbalagem;
+                return (
+                  <tr key={p.id} className={p.ativo ? "" : "text-texto-suave"}>
+                    <td>
+                      <Link href={`/admin/estoque/${p.id}`} className="font-semibold text-texto hover:text-menta">
+                        {p.nome}
+                      </Link>
+                      {!p.ativo && <span className="ml-2 text-xs">(inativo)</span>}
+                    </td>
+                    <td className="text-right tabular-nums">
+                      <span className={baixo ? "font-semibold text-perigo" : ""}>
+                        {formatarQuantidade(p.estoqueAtual, p.unidade)}
+                      </span>
+                      <span className="block text-xs text-texto-suave">
+                        {embalagens.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} emb. de{" "}
+                        {formatarQuantidade(p.tamanhoEmbalagem, p.unidade)}
+                      </span>
+                    </td>
+                    <td className="text-right tabular-nums">{formatarQuantidade(p.estoqueMinimo, p.unidade)}</td>
+                    <td className="text-right tabular-nums">{usado ? formatarQuantidade(Math.round(usado), p.unidade) : "-"}</td>
+                    <td className="text-right tabular-nums">
+                      {diasRestantes === null ? "-" : diasRestantes > 365 ? "+1 ano" : `${diasRestantes} dias`}
+                    </td>
+                    <td className="text-right tabular-nums">{formatarMoeda(p.precoEmbalagem)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {usuario.papel === "ADMIN" && (
         <details className="painel">

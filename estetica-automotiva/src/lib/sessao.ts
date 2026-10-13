@@ -6,12 +6,31 @@ export const COOKIE_ADMIN = "sessao_admin";
 
 const DURACAO_ADMIN_DIAS = 7;
 
+// Valor do .env.example: nunca serve, nem no seu PC
+const SEGREDO_DE_EXEMPLO = "troque-esta-chave-por-uma-string-grande-e-aleatoria-123456";
+
+/**
+ * Problema com o SESSION_SECRET, ou null se ele estiver bom.
+ * Bom = pelo menos 32 caracteres, não é o do exemplo e não é repetitivo ("aaaa...").
+ */
+export function problemaNoSegredo(segredo = process.env.SESSION_SECRET): string | null {
+  if (!segredo) return "SESSION_SECRET não foi definido";
+  if (segredo.length < 32) return "SESSION_SECRET precisa ter pelo menos 32 caracteres";
+  if (segredo === SEGREDO_DE_EXEMPLO) return "SESSION_SECRET ainda é o valor de exemplo do .env.example";
+  if (new Set(segredo).size < 10) return "SESSION_SECRET é fraco demais (poucos caracteres diferentes)";
+  return null;
+}
+
+const DICA_SEGREDO = `Gere um com: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`;
+
 function chave() {
-  const segredo = process.env.SESSION_SECRET;
-  if (!segredo || segredo.length < 32) {
-    throw new Error("Defina SESSION_SECRET no .env com pelo menos 32 caracteres");
+  const problema = problemaNoSegredo();
+  // em desenvolvimento só o "não definido / curto" impede; em produção, qualquer problema
+  const grave = !process.env.SESSION_SECRET || process.env.SESSION_SECRET.length < 32;
+  if (problema && (grave || process.env.NODE_ENV === "production")) {
+    throw new Error(`${problema}. ${DICA_SEGREDO}`);
   }
-  return new TextEncoder().encode(segredo);
+  return new TextEncoder().encode(process.env.SESSION_SECRET);
 }
 
 // ---------- Admin / funcionário ----------

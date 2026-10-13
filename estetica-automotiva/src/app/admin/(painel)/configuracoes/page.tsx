@@ -8,6 +8,7 @@ import { Cabecalho, Carregando, Secao, Vazio } from "@/components/admin/ui";
 import { BotaoEnviar } from "@/components/admin/botao-enviar";
 import { adicionarBloqueio, removerBloqueio, salvarAgenda, salvarHorarios } from "./actions";
 import { FormLoja } from "./form-loja";
+import { uploadsHabilitados } from "@/lib/uploads";
 import { FormSenha } from "./form-senha";
 
 export const metadata: Metadata = { title: "Configurações" };
@@ -41,7 +42,7 @@ async function Conteudo() {
       {dono && (
         <>
           <Secao titulo="Dados da loja">
-            <FormLoja loja={loja} />
+            <FormLoja loja={loja} uploads={uploadsHabilitados()} />
           </Secao>
 
           <Secao titulo="Agenda">

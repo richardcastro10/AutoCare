@@ -29,7 +29,8 @@ async function Conteudo({ searchParams }: PageProps<"/admin/clientes">) {
       agendamentos: { some: { lojaId } },
       ...(busca && {
         OR: [
-          { nome: { contains: busca } },
+          // Postgres diferencia maiúsculas: mode "insensitive" faz "ana" achar "Ana"
+          { nome: { contains: busca, mode: "insensitive" } },
           ...(digitos ? [{ telefone: { contains: digitos } }] : []),
           { veiculos: { some: { placa: { contains: busca.toUpperCase().replace(/[^A-Z0-9]/g, "") } } } },
         ],

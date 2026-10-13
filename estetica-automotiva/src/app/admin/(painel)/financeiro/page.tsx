@@ -70,7 +70,7 @@ async function Conteudo({ searchParams }: PageProps<"/admin/financeiro">) {
                 itens={r.porPagamento.map(([forma, valor]) => ({
                   rotulo: NOME_PAGAMENTO[forma],
                   valor,
-                  texto: `${formatarMoeda(valor)} (${Math.round((valor / r.receita) * 100)}%)`,
+                  texto: `${formatarMoeda(valor)} (${r.receita ? Math.round((valor / r.receita) * 100) : 0}%)`,
                 }))}
               />
             ) : (

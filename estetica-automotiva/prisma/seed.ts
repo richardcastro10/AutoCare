@@ -1,9 +1,11 @@
-// Popula o banco com dados de exemplo: rode com `npx prisma db seed`
-// ATENÇÃO: apaga tudo que estiver no banco antes!
+// Seed de DEMONSTRAÇÃO (4 lojas + 1 pendente, clientes e ~740 agendamentos).
+// Rode com `npx prisma db seed`. ATENÇÃO: apaga tudo que estiver no banco antes!
+// Só pro seu PC: se recusa a rodar com NODE_ENV=production ou num banco do Neon.
+// Senhas: todos os usuários de demonstração usam DEMO_SENHA e o admin da plataforma
+// vem de PLATAFORMA_ADMIN_* (nada de senha no código).
 import "dotenv/config";
 import bcrypt from "bcryptjs";
-import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
-import { PrismaClient } from "../src/generated/prisma/client";
+import { criarPrisma, ehNeon, lerAdminPlataforma, recusar } from "./banco";
 import type {
   FormaPagamento,
   StatusAgendamento,
@@ -12,9 +14,18 @@ import type {
 import { diaDaSemana, hojeISO, minutosParaHora, somarDias } from "../src/lib/format";
 import { PRODUTOS, SERVICOS, reais } from "./catalogo-padrao";
 
-const prisma = new PrismaClient({
-  adapter: new PrismaBetterSqlite3({ url: process.env.DATABASE_URL ?? "file:./prisma/lavagem.db" }),
-});
+if (process.env.NODE_ENV === "production") {
+  recusar("O seed de demonstração não roda com NODE_ENV=production (ele apaga o banco inteiro).");
+}
+if (ehNeon()) {
+  recusar("O seed de demonstração não roda num banco do Neon (ele apaga o banco inteiro). Use o db:seed:molinari.");
+}
+const DEMO_SENHA = process.env.DEMO_SENHA ?? "";
+if (DEMO_SENHA.length < 8) recusar("Defina DEMO_SENHA no .env (mínimo 8 caracteres): é a senha dos usuários de demonstração.");
+const { problemas, admin } = lerAdminPlataforma();
+if (problemas.length) recusar(problemas.join("\n  "));
+
+const prisma = criarPrisma();
 
 // Gerador pseudoaleatório com semente fixa: o seed sempre gera os mesmos dados
 let semente = 42;
@@ -155,17 +166,18 @@ async function main() {
   await prisma.loja.deleteMany(); // apaga em cascata serviços, produtos, usuários...
 
   const hoje = hojeISO();
-  const senhaDono = await bcrypt.hash("admin123", 10);
+  const senhaDono = await bcrypt.hash(DEMO_SENHA, 10);
+  const senhaAdmin = await bcrypt.hash(admin.senha, 10);
 
   // dono da plataforma (login em /plataforma). upsert: mantém o mesmo id entre um seed
   // e outro, então quem já estava logado na plataforma continua logado
   console.log("Admin da plataforma...");
   await prisma.adminPlataforma.upsert({
-    where: { email: "dono@autocare.com" },
-    update: { nome: "Dono AutoCare", senhaHash: senhaDono },
-    create: { nome: "Dono AutoCare", email: "dono@autocare.com", senhaHash: senhaDono },
+    where: { email: admin.email },
+    update: { nome: admin.nome, senhaHash: senhaAdmin },
+    create: { nome: admin.nome, email: admin.email, senhaHash: senhaAdmin },
   });
-  const senhaFuncionario = await bcrypt.hash("lucas123", 10);
+  const senhaFuncionario = senhaDono;
 
   console.log("Clientes...");
   const letras = [..."ABCDEFGHJKLMNPRSTUVWXYZ"];
@@ -455,10 +467,9 @@ async function main() {
   });
 
   console.log(`Pronto! ${codigo} agendamentos em ${LOJAS.length} lojas ativas + 1 loja pendente.`);
-  console.log("Plataforma: dono@autocare.com / admin123 (em /plataforma)");
-  console.log("Loja pendente: admin@novaloja.com / admin123");
-  console.log("Painel: admin@brilhopro.com / admin123");
-  console.log("Outras lojas: admin@lavacar.com, admin@spadocarro.com, admin@garagemdetail.com (senha admin123)");
+  console.log(`Plataforma (/plataforma): ${admin.email} (senha em PLATAFORMA_ADMIN_SENHA)`);
+  console.log("Painel (/admin): admin@brilhopro.com, lucas@brilhopro.com (funcionário), admin@lavacar.com,");
+  console.log("  admin@spadocarro.com, admin@garagemdetail.com e admin@novaloja.com (pendente). Senha: DEMO_SENHA");
 }
 
 main()

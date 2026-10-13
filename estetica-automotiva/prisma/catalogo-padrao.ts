@@ -1,20 +1,12 @@
 // Catálogo padrão: os 10 produtos e os 7 serviços (com preço por tipo de veículo e
 // ficha técnica) que toda loja nova recebe nos scripts de banco.
-// Usado por prisma/seed.ts (demo) e prisma/seed-molinari.ts (implantação real).
+// Usado por prisma/seed.ts (demo, com produtos e ficha técnica) e prisma/seed-molinari.ts
+// (produção: só os serviços e preços, sem ficha técnica).
 import type { TipoVeiculo } from "../src/generated/prisma/enums";
 
 /** R$ -> centavos */
 export const reais = (v: number) => Math.round(v * 100);
 
-/**
- * Produto da ficha técnica pelo começo do nome:
- * "Shampoo" acha "Shampoo automotivo neutro", "Cera" acha "Cera de carnaúba"...
- */
-export function acharProduto<T extends { nome: string }>(produtos: T[], inicio: string): T {
-  const produto = produtos.find((p) => p.nome.startsWith(inicio));
-  if (!produto) throw new Error(`Ficha técnica cita "${inicio}", que não está em PRODUTOS`);
-  return produto;
-}
 
 // preco = valor de UMA embalagem em reais; tamanho e minimo na unidade do produto
 export const PRODUTOS = [

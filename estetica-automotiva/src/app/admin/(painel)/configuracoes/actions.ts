@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { exigirAdmin, exigirDono } from "@/lib/dal";
 import { TAG_LOJAS, tagLoja } from "@/lib/catalogo";
 import { dataValida, horaParaMinutos, somenteDigitos } from "@/lib/format";
-import { removerImagem, salvarImagem } from "@/lib/uploads";
+import { removerImagem, salvarImagem, uploadsHabilitados } from "@/lib/uploads";
 
 const inteiro = (v: FormDataEntryValue | null, padrao: number) => {
   const n = Number(v);
@@ -33,16 +33,22 @@ export async function salvarLoja(_anterior: EstadoConfig, formData: FormData): P
   const nome = String(formData.get("nome") ?? "").trim();
   if (nome.length < 3) return { erro: "Informe o nome da loja." };
 
-  // fotos (capa e logo): nova, removida ou mantida
-  const capa = await salvarImagem(formData.get("capa"), 1600);
-  if (capa && "erro" in capa) return { erro: capa.erro };
-  const logo = await salvarImagem(formData.get("logo"), 600);
-  if (logo && "erro" in logo) return { erro: logo.erro };
+  // fotos (capa e logo): nova, removida ou mantida. Com o envio de fotos desligado
+  // (UPLOADS_HABILITADOS), qualquer arquivo é ignorado e as fotos atuais ficam como estão
+  // (inclusive a logo fixa em public/lojas/<slug>-logo.webp).
+  let capaUrl = loja.capaUrl;
+  let logoUrl = loja.logoUrl;
+  if (uploadsHabilitados()) {
+    const capa = await salvarImagem(formData.get("capa"), 1600);
+    if (capa && "erro" in capa) return { erro: capa.erro };
+    const logo = await salvarImagem(formData.get("logo"), 600);
+    if (logo && "erro" in logo) return { erro: logo.erro };
 
-  const capaUrl = capa ? capa.url : formData.get("removerCapa") === "on" ? "" : loja.capaUrl;
-  const logoUrl = logo ? logo.url : formData.get("removerLogo") === "on" ? "" : loja.logoUrl;
-  if (loja.capaUrl && loja.capaUrl !== capaUrl) await removerImagem(loja.capaUrl);
-  if (loja.logoUrl && loja.logoUrl !== logoUrl) await removerImagem(loja.logoUrl);
+    capaUrl = capa ? capa.url : formData.get("removerCapa") === "on" ? "" : loja.capaUrl;
+    logoUrl = logo ? logo.url : formData.get("removerLogo") === "on" ? "" : loja.logoUrl;
+    if (loja.capaUrl && loja.capaUrl !== capaUrl) await removerImagem(loja.capaUrl);
+    if (loja.logoUrl && loja.logoUrl !== logoUrl) await removerImagem(loja.logoUrl);
+  }
 
   await prisma.loja.update({
     where: { id: lojaId },
